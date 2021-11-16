@@ -1,0 +1,978 @@
+---
+title: "Eksamen i Spidskompetence 2021"
+author: "Josette Siig Gaardsvig"
+date: "Last updated 2021-11-16"
+#geometry: "left=2.5cm,right=2.5cm,top=2cm,bottom=2cm"
+output:
+  word_document:
+    fig_caption: no
+    fig_height: 3.5
+    fig_width: 8
+    number_sections: yes
+    toc: yes
+  html_document:
+    df_print: paged
+    toc: yes
+header-includes:
+- \usepackage{fancyhdr}
+- \pagestyle{fancy}
+- \fancyhead[CO,CE]{Bjarne Taulo Sørensen}
+- \fancyfoot[CO,CE]{Do not copy or distribute this document without author's consent}
+- \usepackage{lastpage}
+- \fancyfoot[LE,RO]{\thepage\ of \pageref{LastPage}}
+editor_options: 
+  markdown: 
+    wrap: sentence
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+
+**ABSTRACT**
+
+**This paper presents a comparative study on five different machine learning methods applied to the challenging problem of customer churning prediction in the telecommunications industry.**
+
+**The scope has been to investigate the features that influence wether a customer churns or not. The dataset used is the Telco-Telecom dataset.**
+
+**The dataset has been analized by five machine learning classifier methods: Logistic Regression, Decision Tree, Random Forest, Support Vector Classifier (SVC) and Support Vector Machines (SVM), with special focus on the two latter.**
+
+**The results of the tests show that the most significant features are the length of the contract period, the longer the less the costumer is prone to churn, and electronic payment.**
+
+**Logistic Regression predicts with the highest accuracy 81.12 percent, Random Forest (tuned) second best with 80.55 percent.**
+
+**SVC predicts with an accuracy of 80.83 percent. This is better than SVM, which predicts with an accuracy of 78.39 percent. This is a result of the fact that the correlation between the data in the Telco dataset is linear, while the result is opposite when the classifiers are used on a non-linear dataset.**
+
+
+
+
+
+
+
+# Forretningsproblematik
+
+Denne opgave omhandler fænomenet "churn", som er det forhold, at en kunde skifter fra en udbyder til en anden.
+Ud fra datasættet "Customer-Churn", som indholder observationer fra Telcos kunder, opstilles en statistisk klassifikationsmodel for at finde de karakteristiska, der kendetegner de kunder, der skifter udbyder (churner) og de der ikke gør.
+
+# Litteratur-review
+
+Der findes en del artikler, der sammenligner forskellige ML metoders prædiktionsevne på churn.
+
+Xia og Jin (1) skriver i en deres afhandling om support vector machines på risikoberegning i forbindelse med churn-problematikken. De kommer frem til, at denne metode sammenlignet med neurale netværk, beslutningstræ, logistisk regression og naive bayes classifier, klarer sig bedst som prædiktionsværktøj.
+
+Farquad, Ravi og Raju (2) analyserer på kreditkort kunders churn i deres undersøgelse. De anvender beslutningstræ og support vector machines i deres analyse. De kommer frem til, at Support Vector Machines klarer sig bedst på ikke-lineære data, men har den ulempe, at resultaterne undervejs i læringsprocessen (learning process) ikke er synlige, og derfor er det nødvendigt at lave en rangordning af variablerne gennem en anden proces.
+
+xxx (3) analyserer churn indenfor teleindustrien ved hjælp af Cross Validation og Support Vector machines. De kommer frem til at den metoder, der virker bedst på datasættet er en boostet version af poly-svm, som giver dem en prædiktionsnøjagtighed på næsten 97 procent.
+
+Ved gennemgangen af foreliggende videnskabeligt materiale, som er offentligt tilgængeligt på Internettet, har det vist sig, at churnproblematikken generelt er belyst ved hjælp af flere forskellige ML metoder, men det har ikke været muligt at finde frem til en sammenligning af logistisk regression, beslutningstræ, random forest, support vector classifier og support vector machine. Derfor har jeg fundet det interessant at lave en sammenligning af netop disse prædiktionsmetoder i denne kvalitative analyse af churn problematikken.
+Anvendelsen af support vectorer er ikke pensum, og derfor specielt interessant, hvorfor der er sat ekstra fokus på denne del af analysen.
+
+
+# Problemformulering
+
+I denne opgave sammenligner jeg 5 forskellige machine-learning værktøjers evne til at prædiktere hvorvidt en given kunde vil skifte teleudbyder, med specielt fokus på Support Vector Machines.
+
+
+# Metode
+
+Opgaven er som helhed struktureret over CRISP-metoden, som er en iterativ proces i 6 trin beregnet på machine learning (ML).
+Den opstillede statistiske churn-model testes ved hjælp af ML-metoderne: "lotistic regression", "decision tree", "random forest" og "support vector classifier", samt "support vector machine"; med særligt fokus på de to sidste.
+
+
+```{r}
+pacman::p_load("tidyverse", "magrittr", "nycflights13", "gapminder",
+"Lahman", "maps", "lubridate", "pryr", "hms", "hexbin",
+"feather", "htmlwidgets", "broom", "pander", "modelr",
+"XML", "httr", "jsonlite", "lubridate", "microbenchmark",
+"splines", "ISLR", "MASS", "testthat", "caret", "gbm",
+"RSQLite", "class", "babynames", "nasaweather", "pls",
+"fueleconomy", "viridis", "boot", "devtools", "tree",
+"glmnet", "gam", "akima", "factoextra", "randomForest",
+"ggrepel", "GGally", "fmsb", "sjPlot", "rcompanion",
+"leaps", "caretEnsemble", "corrplot", "ggplot2", "gridExtra", "ggthemes", "party", "rpart", "rpart.plot", "e1071", "plyr", "dplyr")
+```
+
+
+# Beskrivelse af datasættet
+
+Churn-datasættet består af 7043 observationer på 21 variabler og indholder oplysninger om telekundernes abbonnementssammensætning, abbonnementets varighed, samt hvorvidt de churner eller ej. En oversigt over variablerne findes vedhæftet i bilag 1.
+
+```{r}
+churn <- read.csv('Customer-Churn.csv')
+```
+
+# Dataforberelse
+
+Datasættet indeholder nogle NA-er, som erstattes af gennemsnittet.
+Derefter rettes dataene til, så de kan anvendes i modelleringen.
+"No internet service" ændres til "No", og "No phone service" ændres ligeledes til "No".
+
+Det ses at variablen"tenure", som er abbonnementets længde, har et minimum på 1 måned og et maksimum på 72 måneder, hvilket er et stort spænd, og det splittes derfor op i 5 kategorier med hver sin varighed.
+
+Variablen "SeniorCitizen ændres fra at være en 0/1 variabel til "No" og "Yes", fordi dette gør det lettere at fortolke "decision tree" modellen.
+
+Til sidst fjernes de variabler, som ikke skal anvendes i analysen, "customerID" og "tenure".
+Og fordi variablerne ""MonthlyCharges" og "TotalCharges" er indbyrdes korrelerede er det nødvendigt at fjerne den ene, "TotalCharges".
+
+```{r}
+sapply(churn, function(x) sum(is.na(x)))
+```
+
+```{r}
+churn <- churn[complete.cases(churn), ]
+```
+
+```{r}
+cols_recode1 <- c(10:15)
+for(i in 1:ncol(churn[,cols_recode1])) {
+        churn[,cols_recode1][,i] <- as.factor(mapvalues
+                                              (churn[,cols_recode1][,i], from =c("No internet service"),to=c("No")))
+}
+```
+
+```{r}
+churn$MultipleLines <- as.factor(mapvalues(churn$MultipleLines, 
+                                           from=c("No phone service"),
+                                           to=c("No")))
+```
+
+```{r}
+min(churn$tenure); max(churn$tenure)
+```
+
+```{r}
+group_tenure <- function(tenure){
+    if (tenure >= 0 & tenure <= 12){
+        return('0-12 Month')
+    }else if(tenure > 12 & tenure <= 24){
+        return('12-24 Month')
+    }else if (tenure > 24 & tenure <= 48){
+        return('24-48 Month')
+    }else if (tenure > 48 & tenure <=60){
+        return('48-60 Month')
+    }else if (tenure > 60){
+        return('> 60 Month')
+    }
+}
+churn$tenure_group <- sapply(churn$tenure,group_tenure)
+churn$tenure_group <- as.factor(churn$tenure_group)
+```
+
+```{r}
+churn$SeniorCitizen <- as.factor(mapvalues(churn$SeniorCitizen,
+                                      from=c("0","1"),
+                                      to=c("No", "Yes")))
+```
+
+```{r}
+churn$customerID <- NULL
+churn$tenure <- NULL
+```
+
+**Korrelationsmatrice over de numeriske variabler**
+
+```{r}
+numeric.var <- sapply(churn, is.numeric)
+corr.matrix <- cor(churn[,numeric.var])
+corrplot(corr.matrix, main=" ", method="number")
+```
+
+```{r}
+churn$TotalCharges <- NULL
+```
+
+
+# Fordelingen af de kategoriske variabler
+
+Plottet af de kategoriske variabler viser, at de fleste telekunder har internetservice. Der er dog stadig nogle der ikke har, hvilket kan skyldes manglende dækning (tallene er ikke nye).
+Cirka halvdelen af kunderne har månedskontrakt, mens den anden halvdel er fordelt på 1- og 2-års kontrakt. Der er derfor plads til at få flyttet nogle af månedskunderne over på de længerevarende kontrakter.
+De fleste kunder har automatisk betaling, cirka 2/3, resten har ikke.
+Generelt er der derfor plads til at ændre på nogle af kundeengagementerne til længere kontrakter med automatisk betaling. Om det er muligt at tilbyde internetservice afhænger bl.a. om der udbydes tilslutning i det pågældende geografiske område.
+
+```{r}
+p1 <- ggplot(churn, aes(x=gender)) + ggtitle("Gender") + xlab("Gender") +
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + ylab("Percentage") + coord_flip() + theme_minimal()
+p2 <- ggplot(churn, aes(x=SeniorCitizen)) + ggtitle("Senior Citizen") + xlab("Senior Citizen") + 
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + ylab("Percentage") + coord_flip() + theme_minimal()
+p3 <- ggplot(churn, aes(x=Partner)) + ggtitle("Partner") + xlab("Partner") + 
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + ylab("Percentage") + coord_flip() + theme_minimal()
+p4 <- ggplot(churn, aes(x=Dependents)) + ggtitle("Dependents") + xlab("Dependents") +
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + ylab("Percentage") + coord_flip() + theme_minimal()
+grid.arrange(p1, p2, p3, p4, ncol=2)
+```
+
+```{r}
+p5 <- ggplot(churn, aes(x=PhoneService)) + ggtitle("Phone Service") + xlab("Phone Service") +
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + ylab("Percentage") + coord_flip() + theme_minimal()
+p6 <- ggplot(churn, aes(x=MultipleLines)) + ggtitle("Multiple Lines") + xlab("Multiple Lines") + 
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + ylab("Percentage") + coord_flip() + theme_minimal()
+p7 <- ggplot(churn, aes(x=InternetService)) + ggtitle("Internet Service") + xlab("Internet Service") + 
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + ylab("Percentage") + coord_flip() + theme_minimal()
+p8 <- ggplot(churn, aes(x=OnlineSecurity)) + ggtitle("Online Security") + xlab("Online Security") +
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + ylab("Percentage") + coord_flip() + theme_minimal()
+grid.arrange(p5, p6, p7, p8, ncol=2)
+```
+
+```{r}
+p9 <- ggplot(churn, aes(x=OnlineBackup)) + ggtitle("Online Backup") + xlab("Online Backup") +
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + ylab("Percentage") + coord_flip() + theme_minimal()
+p10 <- ggplot(churn, aes(x=DeviceProtection)) + ggtitle("Device Protection") + xlab("Device Protection") + 
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + ylab("Percentage") + coord_flip() + theme_minimal()
+p11 <- ggplot(churn, aes(x=TechSupport)) + ggtitle("Tech Support") + xlab("Tech Support") + 
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + ylab("Percentage") + coord_flip() + theme_minimal()
+p12 <- ggplot(churn, aes(x=StreamingTV)) + ggtitle("Streaming TV") + xlab("Streaming TV") +
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + ylab("Percentage") + coord_flip() + theme_minimal()
+grid.arrange(p9, p10, p11, p12, ncol=2)
+```
+
+```{r}
+p13 <- ggplot(churn, aes(x=StreamingMovies)) + ggtitle("Streaming Movies") + xlab("Streaming Movies") +
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + ylab("Percentage") + coord_flip() + theme_minimal()
+p14 <- ggplot(churn, aes(x=Contract)) + ggtitle("Contract") + xlab("Contract") + 
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + ylab("Percentage") + coord_flip() + theme_minimal()
+p15 <- ggplot(churn, aes(x=PaperlessBilling)) + ggtitle("Paperless Billing") + xlab("Paperless Billing") + 
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + ylab("Percentage") + coord_flip() + theme_minimal()
+p16 <- ggplot(churn, aes(x=PaymentMethod)) + ggtitle("Payment Method") + xlab("Payment Method") +
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + ylab("Percentage") + coord_flip() + theme_minimal()
+p17 <- ggplot(churn, aes(x=tenure_group)) + ggtitle("Tenure Group") + xlab("Tenure Group") +
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + ylab("Percentage") + coord_flip() + theme_minimal()
+grid.arrange(p13, p14, p15, p16, p17, ncol=2)
+```
+
+LAVER VARIABLEN "Churn" OM TIL EN BINÆR VARIABEL (0/1)
+
+```{r}
+churn$Churn <- as.character(churn$Churn)
+churn$Churn[churn$Churn=="No"] <- "0"
+churn$Churn[churn$Churn=="Yes"] <- "1"
+churn$Churn <- as.factor(churn$Churn)
+```
+
+```{r}
+#glimpse(churn)
+```
+
+SPLITTER DATASÆTTET I TRÆNINGS- OG TESTSÆT
+
+```{r}
+set.seed(123)
+split <- createDataPartition(churn$Churn,p=0.7,list=FALSE)
+set.seed(2017)
+train <- churn[split,]
+test <- churn[-split,]
+```
+
+CHECKER STØRRELSEN AF TRÆNINGS- OG TESTSÆTTET
+
+```{r}
+dim(train); dim(test)
+```
+
+
+# Logistisk Regression
+
+Opsumeringen af den logistiske regression viser, at variablerne "Contract", "tenure_group" og "PaperlessBilling" har størst betydning for churn.
+Med andre ord; kontraktlængde og elektronisk betaling forbedrer muligheden for at holde på kunderne.
+Den logistiske regression prædikterer med en nøjagtighed på 81,12 procent.
+
+LAVER EN LOGISTISK REGRESSIONSMODEL
+
+```{r}
+log_model <- glm(Churn ~ .,family=binomial,data=train)
+print(summary(log_model))
+
+```
+
+Feature Analysis
+
+```{r}
+anova(log_model, test="Chisq")
+```
+
+CONFUSION MATRIX FOR LOGISTIC REGRESSION:
+
+```{r}
+glm_probs=predict(log_model, test, type="response")
+```
+
+```{r}
+glm_pred=rep("0", 2108)
+```
+
+```{r}
+glm_pred[glm_probs > 0.5] = "1"
+```
+
+```{r}
+table(glm_pred, test$Churn)
+```
+
+ODDS UDREGNES
+
+```{r}
+#library(MASS)
+exp(cbind(OR=coef(log_model), confint(log_model)))
+```
+
+------------------------------------------------------------------------
+
+# Beslutningstræ (Decision Tree)
+
+Træet forudsiger "churn" med 79,6 % nøjagtighed, hvilket betyder at dette klassifikationsværktøj er lidt dårligere til at prædiktere på det valgte datasæt end den logistiske regression.
+Ikke overraskende er der en sammenhæng mellem abbonnementskontraktens længde og hvorvidt kunden er tilbøjelig til at churne.
+Nu længere bindingsperiode, nu mindre churn.
+
+Den næste variabel af betydning for churn er "InternetService", hvilket ikke er samme resultat som i den logistiske regression. Træer er ikke så tilbøjelige til at overfitte, som logistisk regression, men de kan give forskellige resultater for hvert gennemløb når stikprøven er lille.
+
+Den tredie variabel er abbonnementsvarighed, hvilket dækker over det samme som kontraktlængde.
+Nu længere abbonnement, nu mindre sandsynlighed for at churne, en indbyrdes korrelation ses.
+Sammenfattet er abbonnementslængde og Internetservice for teleudbyderen de vigtigste faktorer for at undgå at kunderne churner.
+
+Det beskårne træ klarer sig prædiktionsmæssigt lidt dårligere end det hele træ med en nøjagtighed på 79,36 %.
+
+De samme variabler går igen, og understreger resultatet fra det store træ.
+Man kan her diskutere om det er fornuftigt, at beskære træet, når det giver et dårligere resultat.
+
+LAVER TRÆMODEL
+
+```{r}
+tree_model <- rpart(Churn ~ ., data = train, method="class")
+```
+
+PLOTTER TRÆMODELLEN
+
+```{r}
+rpart.plot(tree_model)
+```
+
+------------------------------------------------------------------------
+
+TESTER HVOR GOD DEN UBESKÅRNE TRÆMODEL PRÆDIKTERER (EVT SLET DETTE KODEAFSNIT OG BRUG KUN DEN ANDEN KODE)
+
+```{r}
+set.seed(123)
+tree_pred_1=predict(tree_model, test, type="class")
+mean(tree_pred_1!=test$Churn) 
+```
+
+BESKÆRER TRÆET
+
+```{r}
+tree_pruned <- prune(tree_model,cp = 0.015)
+rpart.plot(tree_pruned)
+```
+
+------------------------------------------------------------------------
+
+TESTER HVOR GODT DEN BESKÅRNE TRÆMODEL PRÆDIKTERER
+
+```{r}
+set.seed(123)
+tree_pred=predict(tree_pruned, test, type="class")
+mean(tree_pred!=test$Churn) 
+```
+
+
+
+TESTER MED EN ANDEN PROGRAMKODE HVOR GODT DEN UBESKÅRNE TRÆMODEL PRÆDIKTERRER
+
+Decision tree confusion matrix
+
+```{r}
+pred_tree <- predict(tree_model, test, type="class")
+print("Confusion Matrix for Decision Tree"); table(Predicted = pred_tree, Actual = test$Churn)
+```
+
+Decision tree accuracy
+
+```{r}
+p1 <- predict(tree_model, test, type="class")
+tab1 <- table(Predicted = p1, Actual = test$Churn)
+tab2 <- table(Predicted = pred_tree, Actual = test$Churn)
+print(paste('Decision Tree Accuracy',sum(diag(tab2))/sum(tab2)))
+```
+
+TESTER MED DEN ANDEN PROGRAMKODE HVORDAN DEN BESKÅRNE TRÆMODEL PRÆDIKTERER
+
+```{r}
+pred_tree_pruned <- predict(tree_pruned, test, type="class")
+print("Confusion Matrix for Decision Tree"); table(Predicted = pred_tree_pruned, Actual = test$Churn)
+```
+
+DEN BESKÅRNE MODELS NØJAGTIGHED
+
+```{r}
+p1_p <- predict(tree_pruned, test, type="class")
+tab1_p <- table(Predicted = p1_p, Actual = test$Churn)
+tab2_p <- table(Predicted = pred_tree_pruned, Actual = test$Churn)
+print(paste('Decision Tree Accuracy',sum(diag(tab2_p))/sum(tab2_p)))
+```
+
+------------------------------------------------------------------------
+
+# Random Forest
+
+Resultatet af Random Forest testen viser en prædiktionsnøjagtighed på 79,46 %, hvilket er dårligere end både den logistiske regression og den ubeskårne træ-model.
+Dette kunne tyde på, at sammenhængen i dataene er lineær, og at en lineær model derfor bedst beskriver disse.
+
+RF-modellen tunes med 200 træer og forbedres til at kunne prædiktere med en nøjagtighed på 80,55 %, hvilket er bedre end nogen af de tidligere anvendte klassifikationsværktøjer (logistisk regression og træ-model).
+
+De forhold, der spiller størst rolle for churn i Random Forest modellen går igen fra tidligere, nemlig: kontraktlængden og betalingsmetode, samt internetservice.
+
+OPSTILLER RANDOM FOREST MODELLEN
+
+```{r}
+rf_model <- randomForest(Churn ~., data = train)
+print(rf_model)
+```
+
+RANDOM FOREST MODELLENS NØJAGTIGHED
+
+```{r}
+rf_pred <- predict(rf_model, test)
+caret::confusionMatrix(rf_pred, test$Churn)
+
+```
+
+PLOT AF RANDOM FOREST FEJLRATEN
+
+```{r}
+plot(rf_model)
+```
+
+TUNER RANDOM FOREST MODELLEN EFTER BEDSTE ANTAL TRÆER (FRA PLOTTET)
+
+```{r}
+rf_tuned <- tuneRF(train[, -18], train[, 18], stepFactor = 0.5, plot = TRUE, ntreeTry = 200, trace = TRUE, improve = 0.05)
+
+```
+
+FITTER RANDOM FOREST MODELLEN EFTER TUNING
+
+```{r}
+rf_model_ny <- randomForest(Churn ~., data = train, ntree = 200, mtry = 2, importance = TRUE, proximity = TRUE)
+print(rf_model_ny)
+```
+
+CONFUSION MATRIX - RANDOM FOREST MODELLENS EVNE TIL AT FORUDSIGE EFTER TUNINGEN
+
+```{r}
+pred_rf_ny <- predict(rf_model_ny, test)
+caret::confusionMatrix(pred_rf_ny, test$Churn)
+```
+
+VARIABLERNES INDFLYDELSE PÅ RANDOM FOREST MODELLEN
+
+```{r}
+varImpPlot(rf_model_ny, sort=T, n.var = 10, main = 'Top 10 Feature Importance')
+```
+
+------------------------------------------------------------------------
+
+
+LAVER SVM (BRUGER PAKKEN e1071)
+
+```{r}
+library(e1071)
+```
+
+# SVC (Support Vector Classifier)
+
+SVC er en lineær ML klassifikationsmetode, der for en binær klassifikation kan anvendes på lige fod med logistisk regression.
+Hver variabel får sin egen dimension, der opdeles med et lineært hyperplan til sortering af den afhængige variable i 0 og 1.
+Rettere sagt sorteres variablen i -1 og 1 alt efter på hvilket sine af hyperplanet observationen falder i.
+SVC-modellen tunes med cost-parameteren, der fortæller hvor mange fejlplacerede observationer der kan tolereres.
+Nu højere cost-værdi nu større margin tolereres.
+SVC-modellen tunes her i opgaven ved hjælp af 10 gange crossvalidation.
+
+Resultatet af SVC klassifikationen giver en fejlrate på 19,17 %, eller omsat til prædiktionsnøjagtighed 80,83 %, hvilket betyder at det lineære klassifikationsværktøj Support Vector Classifier performer næstbedst efter logistisk regression, som holder førstepladsen.
+
+LINEÆR SVC (SUPPORT VECTOR CLASSIFIER)
+
+```{r}
+set.seed(123)
+tune_out_l = tune(svm, Churn~., data = train, kernel = "linear",
+                ranges = list(cost = c(0.1,1,10,100)))
+bestmod_l = tune_out_l$best.model
+summary(bestmod_l)
+```
+
+```{r}
+l_pred=predict (bestmod_l ,test)
+table(predict =l_pred , truth=test$Churn)
+```
+
+```{r}
+correctRate_l = sum(l_pred==test$Churn)/length(test$Churn)
+misRate_l=1-correctRate_l
+```
+
+```{r}
+print(misRate_l)
+```
+________________________________________________________________________________
+
+# SVM (Support Vector Machines)
+
+SVM er en fleksibel klassifikationsmetode, der egner sig godt til klassifikation af ikke-lineære data.
+I denne opgave er udfaldsrummet for den afhængige variabel to-delt, men SVM kan godt håndtere multiple udfaldsrum.
+Som i SVC tunes cost-parameteren, og dertil tunes en ekstra parameter "gamma".
+
+Resultatet af SVM-klassifikationene giver en fejlrate på 20,16 %, eller omsat til prædiktionsnøjagtighed, 78,39 %, hvilket er det dårligste resultat af de i denne opgave anvendte klassifikationsværktøjer på Churn-datasættet.
+Dette kunne skyldes, at dataenes sammenhæng er lineær, og at en fleksibel, og ikke-lineær, model forklarer dårligere end en lineær, som SVC, og logistisk regression.
+
+RADIAL SVM (SUPPORT VECTOR MACHINE) MODEL
+
+```{r}
+set.seed(123)
+tune_out_r = tune(svm, Churn~., data = train, kernel = "radial",
+                ranges = list(cost = c(0.1,1,10,100), gamma = c(0.5,1,2,3,4)))
+bestmod_r = tune_out_r$best.model
+summary(bestmod_r)
+```
+
+```{r}
+bestmod_r$cost
+```
+
+```{r}
+bestmod_r$gamma
+```
+
+```{r}
+r_pred=predict (bestmod_r ,test)
+table(predict =r_pred , truth=test$Churn)
+```
+
+
+RADIAL SVM MODELS FEJLSRATE
+
+```{r}
+correctRate_r = sum(r_pred==test$Churn)/length(test$Churn)
+misRate_r=1-correctRate_r
+```
+
+```{r}
+print(misRate_r)
+```
+
+
+------------------------------------------------------------------------
+
+# ROC Kurver for SVC og SVM for Churn
+
+Roc-kurverne understreger, at SVC (den lineære test) klarer sig bedre end den ikke lineære, iden den røde kurve, som repræsenterer SVM, er lidt dårligere end den sorte, som repræsenterer SVC.
+
+ROC KURVER FOR SVM
+
+HENTER PAKKEN "ROCR"
+
+```{r}
+library(ROCR)
+```
+
+LAVER EN FUNKTION TIL AT LAVE ROC KURVER MED
+
+```{r}
+rocplot =function (pred , truth , ...){
+predob = prediction (pred , truth)
+perf = performance (predob , "tpr", "fpr")
+plot(perf ,...)}
+```
+
+ANVENDER DEN OPTIMALE COST OG GAMMA TIL AT OPSTILLE DEN OPTIMALE RADIALE MODEL
+
+```{r}
+ svmfit.opt=svm(Churn~., data=train, kernel ="radial",
+gamma=0.5, cost=1, decision.values =T)
+fitted =attributes (predict (svmfit.opt ,train, decision.values=TRUE))$decision.values
+```
+
+ROC KURVE FOR TRÆNINGSSÆTTET
+
+```{r}
+par(mfrow=c(1,2))
+rocplot(fitted ,train$Churn, main="Training Data")
+```
+
+ROC KURVER FOR TESTSÆTTET - FORUDSIGELSESNØJAGTIGHED FOR TESTDATAENE
+
+```{r}
+fitted =attributes (predict (bestmod_l , test, decision.values=T))$decision.values
+rocplot (fitted ,test$Churn, main="Test Data")
+fitted=attributes (predict (bestmod_r , test, decision.values=T))$decision.values
+rocplot (fitted , test$Churn, add=T,col="red")
+```
+
+________________________________________________________________________________
+
+# Rangordning af ML værktøjernes evne til at prædiktere
+
+Nedenstående plot viser med hvilken nøjagtighed det i analysen respektive ML klassifikationsværktøj prædikterer hvorvidt en telekunde vil skifte udbyder eller ej.
+Det ses at for det lineære datasæt, Customer-Churn, prædikterer logistisk regression bedst, og Support Vector Classifier (linæer) klarer sig bedre end Support Vector Machine (ikke-lineær).
+
+LAVER DATAFRAME OVER CLASSIFIER-PERFORMANCE
+
+```{r}
+df <- data.frame(Classifier=c("log_regr", "tree", "tree_prun", "random_for", "rand_f_tun", "SVC", "SVM"),
+                   Accuracy=c(0.8112, 0.7960, 0.7936, 0.7946, 0.8055, 0.8083, 0.7839))
+#view(df)
+```
+
+PLOTTER PRÆDIKTIONS-NØJAGTIGHEDEN
+
+```{r}
+library(ggplot2)
+```
+
+PLOTTER PRÆDIKTIONS-NØJAGTIGHEDEN MED REORDER
+
+```{r}
+p<-ggplot(data=df, aes(x=reorder(Classifier, Accuracy), y=Accuracy, fill=Classifier)) +
+  ggtitle("Classifier Prediction Accuracy") + geom_bar(stat="identity")
+p
+```
+
+________________________________________________________________________________
+
+
+# SVC og SVM på et ikke-lineært datasæt
+
+For at undersøge, om SVMs dårlige performance på Churn-datasættet kunne hænge sammen med at dataene er lineært afhængige, anvender jeg datasættet "Intention", som omhandler konsumenters tilbøjelighed til at ville købe økologiske tomater.
+Først laves en træ-model af datasættet "Intention", hvoraf det ses at variablen "quality" går igen i flere niveauer af træet, hvilket tyder på en ikke-lineær sammenhæng mellem den afhængige variabel "buy" (købsintention) og de uafhængige variabler.
+
+Derefter anvendes SVC og SVM på Intention-datasættet og prædiktionsnøjagtighederne sammenlighes.
+
+Den lineære model, SVC, prædikterer med 90,22 % nøjagtighed og den radiale model (SVM) prædikterer med 91,11 % nøjagtighed.
+Af dette ses, at SVM (Support Vector Machines) prædikterer bedre på ikke-lineære modeller end på lineære, hvilket også er logisk, fordi der er valgt en radial kernel.
+
+Overordnet klarer logistisk regression sig bedst af de i denne analyse andvendte klassifikationsværktøjer når det gælder prædiktion på Churn-datasættet, med en nøjagtighed på 81,12%.
+At SVM ikke klarer sig bedre end de 78,39% skyldes, at metoden har en radial kernel og derfor er tilpasset anvendelse på ikke-lineære datasæt.
+
+INTENTION DATASÆTTET
+
+HENTER DATASÆTTET
+
+```{r}
+library(readxl)
+Intention <- read.csv("Intention.csv")
+#View(Intention)
+```
+
+DECISION TREE MED PAKKEN RPART OG RPART.PLOT
+
+```{r}
+library(rpart)
+library(rpart.plot)
+```
+
+OPSTILLER TRÆ-MODELLEN
+
+```{r}
+tree_model <- rpart(buy ~ ., data = Intention, method="class")
+```
+
+PLOTTER TRÆ-MODELLEN
+
+```{r}
+rpart.plot(tree_model)
+```
+
+BESKÆRER TRÆET
+
+```{r}
+tree_pruned <- prune(tree_model,cp = 0.015)
+rpart.plot(tree_pruned)
+```
+
+Træet tyder på at sammenhængen er ikke-lineær (Citat: Bjarne T. S.)
+
+LAVER "buy" TIL FAKTOR
+
+```{r}
+Intention$buy=as.factor(Intention$buy)
+```
+
+```{r}
+#glimpse(Intention)
+```
+
+SPLITTER I TRÆNINGS- OG TESTSÆT (INTENTION)
+
+```{r}
+set.seed(123)
+split_2 <- createDataPartition(Intention$buy,p=0.7,list=FALSE)
+set.seed(2017)
+train_2 <- Intention[split_2,]
+test_2 <- Intention[-split_2,]
+```
+
+LINEÆR SVC MODEL MED INTENTION DATASÆTTET
+
+```{r}
+set.seed(123)
+tune_out_lin_2 = tune(svm, buy~., data = train_2, kernel = "linear",
+                ranges = list(cost = c(0.1,1,10,100)))
+bestmod_linear_2 = tune_out_lin_2$best.model
+summary(bestmod_linear_2)
+```
+
+BRUGER "DEN BEDSTE MODEL" TIL AT PRÆDIKTERE OG LAVER CONFUSION MATRIX
+
+```{r}
+linear_pred_2=predict (bestmod_linear_2 ,test_2)
+table(predict =linear_pred_2 , truth=test_2$buy)
+```
+
+LINEÆR SVM MODELS FEJLSRATE
+
+```{r}
+correctRate_2l = sum(linear_pred_2==test_2$buy)/length(test_2$buy)
+misRate_2l=1-correctRate_2l
+```
+
+```{r}
+print(misRate_2l)
+```
+
+```{r}
+print(correctRate_2l)
+```
+
+------------------------------------------------------------------------
+
+LAVER RADIAL SVM MODEL INTENTION DATASÆTTET) OG TUNER COST OG FINDER BEDSTE COST OG GAMMA
+
+```{r}
+set.seed(123)
+tune_out_2 = tune(svm, buy~., data = train_2, kernel = "radial",
+                ranges = list(cost = c(0.1,1,10,100), gamma = c(0.5,1,2,3,4)))
+bestmod_2 = tune_out_2$best.model
+summary(bestmod_2)
+```
+
+```{r}
+bestmod_2$cost
+```
+
+```{r}
+bestmod_2$gamma
+```
+
+```{r}
+radial_pred_2=predict (bestmod_2 ,test_2)
+table(predict =radial_pred_2 , truth=test_2$buy)
+```
+
+RADIAL SVM MODELS FEJLSRATE (INTENTION)
+
+```{r}
+correctRate_2r = sum(radial_pred_2==test_2$buy)/length(test_2$buy)
+misRate_2r=1-correctRate_2r
+```
+
+```{r}
+print(misRate_2r)
+```
+
+```{r}
+print(correctRate_2r)
+```
+
+------------------------------------------------------------------------
+
+ROC KURVER FOR SVM (INTENTION)
+
+HENTER PAKKEN "ROCR"
+
+```{r}
+library(ROCR)
+```
+
+LAVER EN FUNKTION TIL AT LAVE ROC KURVER MED
+
+```{r}
+rocplot =function (pred , truth , ...){
+predob = prediction (pred , truth)
+perf = performance (predob , "tpr", "fpr")
+plot(perf ,...)}
+```
+
+ANVENDER DEN OPTIMALE COST OG GAMMA TIL AT OPSTILLE DEN OPTIMALE LINEÆRE MODEL FOR INTENTION DATASÆTTET (SUPPORT VECTOR CLASSIFIER)
+
+```{r}
+ svmfit.opt_2l=svm(buy~., data=train_2, kernel ="linear",
+gamma=0.5, cost=1, decision.values =T)
+fitted_2l =attributes (predict (svmfit.opt_2l ,train_2, decision.values=TRUE))$decision.values
+```
+
+ROC KURVE FOR SVC FOR INTENTION TRÆNINGSSÆTTET
+
+```{r}
+par(mfrow=c(1,2))
+rocplot(fitted_2l ,train_2$buy, main="SVC - Intention Training Data")
+```
+
+ANVENDER DEN OPTIMALE COST OG GAMMA TIL AT OPSTILLE DEN OPTIMALE RADIALE MODEL FOR INTENTION DATASÆTTET (SUPPORT VECTOR MACHINE)
+
+```{r}
+ svmfit.opt_2r=svm(buy~., data=train_2, kernel ="radial",
+gamma=0.5, cost=1, decision.values =T)
+fitted_2r =attributes (predict (svmfit.opt_2r ,train_2, decision.values=TRUE))$decision.values
+```
+
+ROC KURVE FOR SVM FOR INTENTION TRÆNINGSSÆTTET
+
+```{r}
+par(mfrow=c(1,2))
+rocplot(fitted_2r ,train_2$buy, main="SVM - Intention Training Data")
+```
+
+ROC KURVER FOR TESTSÆTTET - FORUDSIGELSESNØJAGTIGHED FOR TESTDATAENE (INTENTION)
+
+```{r}
+fitted_2l =attributes (predict (bestmod_linear_2 , test_2, decision.values=T))$decision.values
+rocplot (fitted_2l ,test_2$buy, main="SVC and SVM (red) - Intention Test Data")
+fitted_2r=attributes (predict (bestmod_2 , test_2, decision.values=T))$decision.values
+rocplot (fitted_2r , test_2$buy, add=T,col="red")
+```
+
+________________________________________________________________________________
+# Alternativ - mindre model
+
+Med de tidligere testresultater som oplæg opstilles en enkel model med to variabler, "Contract" og "PaperlessBilling" og derefter testes modellen med logistisk regression og SVC.
+
+**Logistisk regression**
+
+```{r}
+log_model_s <- glm(Churn ~ Contract + PaperlessBilling + InternetService, data = train, family = binomial)
+```
+
+```{r}
+summary(log_model_s)
+```
+
+
+```{r}
+glm_probs_s=predict(log_model_s, test, type="response")
+```
+
+```{r}
+glm_pred_s=rep("0", 2108)
+```
+
+```{r}
+glm_pred_s[glm_probs_s > 0.5] = "1"
+```
+
+```{r}
+table(glm_pred_s, test$Churn)
+```
+Den lille  churn model giver 77,13 % Nøjagtighed i Logistisk Regression, hvilket er dårligere end den store, hvor næsten hele datasættet indgår. Og som det ses af Gini-indekset for Random Forest testen, så er churn indflueret af flere faktorer end de tre udvalgte. Samtidig skal det dog tilføjes, at med 77,13 % for tre variabler, har teleselskabet et fornuftigt udgangspunkt når man ønsker at minimere risikoen for at kunderne skifter teleudbyder.
+
+________________________________________________________________________________
+
+# Konklusion
+
+I denne opgave har jeg ud fra datasættet "Customer-Churn", opstillet en prædiktiv klassifikationsmodel for om telekunder vil churne eller ej.
+Derefter har jeg testet modellen ved hjælp af 5 klassifikationsværktøjer: logistisk regression, decision tree, random forest og Support Vector Classifier, samt Support Vector Machines, med ekstra fokus på de to sidstnævnte.
+
+Resultatet af modelleringen viser at de vigtigste parametre (variabler) er kontraktens varighed, elektronisk betaling og internetservice.
+Teleudbyderen anbefales derfor, for at minimere risikoen for at kunderne skifter udbyder, at sælge disse en 1- eller 2-års kontrakt med indbygget internetservice og automatisk betaling.
+
+Vedrørende testen af ML metoder, så er Logistisk Regression bedst til at prædiktere på churn-datasættet med en nøjagtighed på 81,12%, hvor SVM (support vector machines) klarer sig dårligst af samtlige klassifikationsværktøjer,dårligere end SVC, hvilket viser at churn-dataene sandsynligvis har en lineær sammenhæng.
+Omvendt forholder det sig med Intention-datasættet, hvor SVM er bedre til at prædiktere end SVC, fordi der eksisterer en ikke-lineær sammenhæng mellem dataene i dette datasæt.
+
+# Alternativ løsningsmodel
+
+Som et alternativ til de klassifikationsværktøjer, der i denne analyse er anvendt på Churn datasættet kunne Lineær Diskriminant Analyse være interessant at anvende, fordi, der ses overlapninger af variabler, som således kunne slås sammen. LDA kunne være et alternativ til Logistisk Regression.
+I denne analyse er anvendt såvidt muligt hele churn-datasættet i alle klassifikations-testene. Det kunne være interessant at opstille en SVC model kun med de vigtigste variabler, "Contract", "InternetService" og "PaperlessBilling".
+
+
+________________________________________________________________________________
+
+VIDENSKABELIGE ARTIKLER OM CHURN OG SVM
+
+(1)
+<https://www.sciencedirect.com/science/article/abs/pii/S187486510960003X>
+
+Guo-enXIAaWei-dongJINb
+a
+Department of Business Management, Guangxi University of Finance and Economics, Nanning 530003, China
+b
+School of Economics and Management, Southwest Jiaotong University, Chengdu 610031, China
+Received 17 March 2006, Available online 20 February 2009.
+
+(2)
+<https://www.sciencedirect.com/science/article/abs/pii/S1568494614000507>
+
+M.A.H.FarquadabcVadlamaniRaviaS. BapiRajub
+a
+Institute for Development and Research in Banking Technology, Castle Hills Road #1, Masab Tank, Hyderabad 500057, AP, India
+b
+Department of Computer and Information Sciences, University of Hyderabad, Hyderabad 500046, AP, India
+c
+School of Business, The University of Hong Kong, Hong Kong
+Received 9 February 2011, Revised 20 August 2013, Accepted 19 January 2014, Available online 4 February 2014.
+
+(3)
+<https://www.sciencedirect.com/science/article/abs/pii/S1569190X15000386>
+
+T.VafeiadisaK.I.DiamantarasbG.SarigiannidisaK.Ch.Chatzisavvasa
+a
+mSensis S.A., VEPE Technopolis, Bld C2, P.O. Box 60756, GR-57001 Thessaloniki, Greece
+b
+Department of Information Technology, TEI of Thessaloniki, GR-57400 Thessaloniki, Greece
+Received 13 January 2015, Revised 20 February 2015, Accepted 10 March 2015, Available online 3 April 2015.
+
+________________________________________________________________________________
+
+LITTERATUR
+
+(4)
+"An Introduction to Statistical Learning", Gareth James, Daniela Witten, Trevor hastie, Robert Tibshirani, Springer 8th printing 2017 - Chapter 9
+
+________________________________________________________________________________
+
+REFERENCER
+
+<https://subscription.packtpub.com/book/big-data-and-business-intelligence/9781783982042/6/ch06lvl1sec69/visualizing-an-svm-fit>
+
+<https://stackoverflow.com/questions/40509217/how-to-have-r-corrplot-title-position-correct>
+
+<https://towardsdatascience.com/predict-customer-churn-with-r-9e62357d47b4>
+
+<https://data-flair.training/blogs/svm-kernel-functions/>
+
+<https://stackoverflow.com/questions/46844891/how-to-plot-a-roc-curve-for-a-svm-model-in-r>
+
+<https://community.rstudio.com/t/ggplot-barplot-in-decending-order/31126/2>
+
+________________________________________________________________________________
+
+BILAG 1 - Churn-Datasættets variabler
+
+customerID
+gender (female, male)
+SeniorCitizen (Whether the customer is a senior citizen or not (1, 0))
+Partner (Whether the customer has a partner or not (Yes, No))
+Dependents (Whether the customer has dependents or not (Yes, No))
+tenure (Number of months the customer has stayed with the company)
+PhoneService (Whether the customer has a phone service or not (Yes, No))
+MultipleLines (Whether the customer has multiple lines r not (Yes, No, No phone service)
+InternetService (Customer’s internet service provider (DSL, Fiber optic, No)
+OnlineSecurity (Whether the customer has online security or not (Yes, No, No internet service)
+OnlineBackup (Whether the customer has online backup or not (Yes, No, No internet service)
+DeviceProtection (Whether the customer has device protection or not (Yes, No, No internet service)
+TechSupport (Whether the customer has tech support or not (Yes, No, No internet service)
+streamingTV (Whether the customer has streaming TV or not (Yes, No, No internet service)
+streamingMovies (Whether the customer has streaming movies or not (Yes, No, No internet service)
+Contract (The contract term of the customer (Month-to-month, One year, Two year)
+PaperlessBilling (Whether the customer has paperless billing or not (Yes, No))
+PaymentMethod (The customer’s payment method (Electronic check, Mailed check, Bank transfer (automatic), Credit card (automatic)))
+MonthlyCharges (The amount charged to the customer monthly — numeric)
+TotalCharges (The total amount charged to the customer — numeric)
+Churn ( Whether the customer churned or not (Yes or No))
+
+________________________________________________________________________________
